@@ -1,5 +1,5 @@
 import json
-from typing import Union, Any
+from typing import Any
 
 class JSONModifierNode:
     @classmethod
@@ -36,25 +36,78 @@ class JSONModifierNode:
     def _set_by_path(self, data: Any, path: str, value: Any) -> None:
         keys = path.split('.')
         current = data
-        
-        for i, key in enumerate(keys[:-1]):
-            if key.isdigit():
-                key = int(key)
-            elif '[' in key and ']' in key:
-                list_key, index = key[:-1].split('[')
-                current = current[list_key][int(index)]
+
+        for i, raw_key in enumerate(keys[:-1]):
+            if '[' in raw_key and ']' in raw_key:
+                list_key, index = raw_key[:-1].split('[')
+                index = int(index)
+
+                if isinstance(current, dict):
+                    if list_key not in current:
+                        raise ValueError(f"Path {'.'.join(keys[:i+1])} does not exist")
+                    current = current[list_key]
+                elif isinstance(current, list):
+                    if list_key:
+                        raise ValueError(f"Path {'.'.join(keys[:i+1])} is not valid for a list")
+                else:
+                    raise ValueError(f"Path {'.'.join(keys[:i+1])} does not exist")
+
+                if not isinstance(current, list):
+                    raise ValueError(f"Path {'.'.join(keys[:i+1])} is not a list")
+                if index >= len(current):
+                    raise ValueError(f"List index out of range at {'.'.join(keys[:i+1])}")
+
+                current = current[index]
                 continue
-                
-            if key not in current:
+
+            if raw_key.isdigit():
+                index = int(raw_key)
+                if not isinstance(current, list):
+                    raise ValueError(f"Path {'.'.join(keys[:i+1])} is not a list")
+                if index >= len(current):
+                    raise ValueError(f"List index out of range at {'.'.join(keys[:i+1])}")
+                current = current[index]
+                continue
+
+            if not isinstance(current, dict) or raw_key not in current:
                 raise ValueError(f"Path {'.'.join(keys[:i+1])} does not exist")
-            current = current[key]
             
+            current = current[raw_key]
+
         last_key = keys[-1]
-        if last_key.isdigit():
-            last_key = int(last_key)
-        elif '[' in last_key and ']' in last_key:
+
+        if '[' in last_key and ']' in last_key:
             list_key, index = last_key[:-1].split('[')
-            current[list_key][int(index)] = value
+            index = int(index)
+
+            if isinstance(current, dict):
+                if list_key not in current:
+                    raise ValueError(f"Path {path} does not exist")
+                current = current[list_key]
+            elif isinstance(current, list):
+                if list_key:
+                    raise ValueError(f"Path {path} is not valid for a list")
+            else:
+                raise ValueError(f"Path {path} does not exist")
+
+            if not isinstance(current, list):
+                raise ValueError(f"Path {path} is not a list")
+            if index >= len(current):
+                raise ValueError(f"List index out of range at {path}")
+
+            current[index] = value
             return
-            
-        current[last_key] = value 
+
+        if last_key.isdigit():
+            index = int(last_key)
+            if not isinstance(current, list):
+                raise ValueError(f"Path {path} is not a list")
+            if index >= len(current):
+                raise ValueError(f"List index out of range at {path}")
+            current[index] = value
+            return
+
+        if not isinstance(current, dict):
+            raise ValueError(f"Cannot assign key {last_key!r} on a non-dict value")
+
+        current[last_key] = value
